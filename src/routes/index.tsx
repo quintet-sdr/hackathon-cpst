@@ -467,9 +467,7 @@ function App() {
                         <p className="mt-0.5 text-xs text-black">
                           {activeScenario === 'distance-max'
                             ? 'Точка доступна для маршрута'
-                            : inBasket
-                              ? 'Добавлена в корзину и смещена вниз'
-                              : 'Не в корзине'}
+                            : inBasket}
                         </p>
                       </button>
                       {activeScenario !== 'distance-max' ? (

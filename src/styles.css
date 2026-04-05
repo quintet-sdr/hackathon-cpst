@@ -30,7 +30,7 @@
 }
 
 :root[data-theme='dark'] {
-  --sea-ink: #d7ece8;
+  --sea-ink: #07382f;
   --sea-ink-soft: #afcdc8;
   --lagoon: #60d7cf;
   --lagoon-deep: #8de5db;
@@ -53,7 +53,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --sea-ink: #d7ece8;
+    --sea-ink: #05382e;
     --sea-ink-soft: #afcdc8;
     --lagoon: #60d7cf;
     --lagoon-deep: #8de5db;

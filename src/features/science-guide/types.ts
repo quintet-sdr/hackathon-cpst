@@ -6,6 +6,7 @@ export interface SciencePoint {
   lon: number
   name: string
   description: string
+  stopDurationMinutes: number
   photoUrl: string | null
 }
 

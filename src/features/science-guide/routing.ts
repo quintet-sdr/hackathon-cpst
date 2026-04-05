@@ -16,6 +16,15 @@ function resolvePoints(pointIds: number[]): SciencePoint[] {
     .filter((point): point is SciencePoint => point !== null)
 }
 
+function getStopDurationSeconds(pointIds: number[]): number {
+  const uniquePointIds = Array.from(new Set(pointIds))
+
+  return uniquePointIds.reduce((total, pointId) => {
+    const point = sciencePointsById.get(pointId)
+    return total + (point?.stopDurationMinutes ?? 0) * 60
+  }, 0)
+}
+
 export async function buildLectureRoute(
   lectureId: number,
   signal?: AbortSignal,
@@ -36,10 +45,14 @@ export async function buildLectureRoute(
   }
 
   const route = await getOsrmRoute(points.map(toWaypoint), signal)
+  const stopDurationSeconds = getStopDurationSeconds(routePointIds)
 
   return {
     coordinates: route.coordinates,
-    metrics: route.metrics,
+    metrics: {
+      ...route.metrics,
+      durationSeconds: route.metrics.durationSeconds + stopDurationSeconds,
+    },
     waypointIds: routePointIds,
   }
 }
@@ -59,10 +72,14 @@ export async function buildUserRoute(
   }
 
   const route = await getOsrmRoute(points.map(toWaypoint), signal)
+  const stopDurationSeconds = getStopDurationSeconds(uniquePointIds)
 
   return {
     coordinates: route.coordinates,
-    metrics: route.metrics,
+    metrics: {
+      ...route.metrics,
+      durationSeconds: route.metrics.durationSeconds + stopDurationSeconds,
+    },
     waypointIds: uniquePointIds,
   }
 }
@@ -168,6 +185,7 @@ export async function buildMaxPointsDistanceRoute(
 
   const selectedPoints = resolvePoints(selectedPointIds)
   const route = await getOsrmRoute(selectedPoints.map(toWaypoint), signal)
+  const stopDurationSeconds = getStopDurationSeconds(selectedPointIds)
 
   if (route.metrics.distanceMeters > maxDistanceMeters) {
     throw new Error('Could not build a route inside the selected distance budget')
@@ -175,7 +193,10 @@ export async function buildMaxPointsDistanceRoute(
 
   return {
     coordinates: route.coordinates,
-    metrics: route.metrics,
+    metrics: {
+      ...route.metrics,
+      durationSeconds: route.metrics.durationSeconds + stopDurationSeconds,
+    },
     waypointIds: selectedPointIds,
   }
 }
