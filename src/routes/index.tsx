@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { lectures, sciencePoints, sciencePointsById } from '#/features/science-guide/data'
 import {
@@ -7,7 +7,9 @@ import {
   buildMaxPointsDistanceRoute,
   buildUserRoute,
 } from '#/features/science-guide/routing'
+import { fetchWeatherOverview } from '#/features/science-guide/weather'
 import type { BuiltRoute, ScenarioType, SciencePoint } from '#/features/science-guide/types'
+import type { WeatherOverview } from '#/features/science-guide/weather'
 
 const ScienceGuideMap = lazy(async () => {
   const module = await import('../components/ScienceGuideMap')
@@ -116,7 +118,13 @@ function App() {
   const [routeError, setRouteError] = useState<string | null>(null)
   const [isRouting, setIsRouting] = useState(false)
   const [isClient, setIsClient] = useState(false)
+  const [isWeatherPopupOpen, setIsWeatherPopupOpen] = useState(false)
+  const [isWeatherLoading, setIsWeatherLoading] = useState(false)
+  const [weatherError, setWeatherError] = useState<string | null>(null)
+  const [weatherOverview, setWeatherOverview] = useState<WeatherOverview | null>(null)
+  const [weatherUpdatedAt, setWeatherUpdatedAt] = useState<Date | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const weatherAbortRef = useRef<AbortController | null>(null)
 
   const selectedPoint =
     (selectedPointId ? sciencePointsById.get(selectedPointId) : undefined) ?? null
@@ -185,6 +193,61 @@ function App() {
 
   const showLecturesSection = activeScenario === 'lecture'
   const showBasketSection = activeScenario !== 'distance-max'
+
+  const weatherAnchorPoint = useMemo((): SciencePoint => {
+    if (selectedPoint) {
+      return selectedPoint
+    }
+
+    const firstRoutePointId = routeResult?.waypointIds[0]
+    if (firstRoutePointId) {
+      const routePoint = sciencePointsById.get(firstRoutePointId)
+      if (routePoint) {
+        return routePoint
+      }
+    }
+
+    return sciencePoints[0]
+  }, [selectedPoint, routeResult?.waypointIds])
+
+  const refreshWeather = useCallback(async () => {
+    weatherAbortRef.current?.abort()
+    const controller = new AbortController()
+    weatherAbortRef.current = controller
+    setIsWeatherLoading(true)
+    setWeatherError(null)
+
+    try {
+      const weatherData = await fetchWeatherOverview(
+        weatherAnchorPoint.lat,
+        weatherAnchorPoint.lon,
+        weatherAnchorPoint.name,
+        controller.signal,
+      )
+      setWeatherOverview(weatherData)
+      setWeatherUpdatedAt(new Date())
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
+
+      setWeatherError(
+        error instanceof Error
+          ? error.message
+          : 'Не удалось обновить погоду',
+      )
+    } finally {
+      if (weatherAbortRef.current === controller) {
+        weatherAbortRef.current = null
+        setIsWeatherLoading(false)
+      }
+    }
+  }, [weatherAnchorPoint])
+
+  function toggleWeatherPopup() {
+    const shouldOpen = !isWeatherPopupOpen
+    setIsWeatherPopupOpen(shouldOpen)
+  }
 
   function handleDistanceLimitBlur() {
     const parsed = parseDistanceLimitInputStrict(distanceLimitInput)
@@ -313,9 +376,18 @@ function App() {
     }
   }, [activeScenario, selectedLectureId])
 
+  useEffect(() => {
+    if (!isWeatherPopupOpen) {
+      return
+    }
+
+    void refreshWeather()
+  }, [isWeatherPopupOpen, weatherAnchorPoint.id, refreshWeather])
+
   useEffect(
     () => () => {
       abortRef.current?.abort()
+      weatherAbortRef.current?.abort()
     },
     [],
   )
@@ -601,6 +673,94 @@ function App() {
             >
               {isRouting ? 'Обновление...' : 'Обновить маршрут'}
             </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => void toggleWeatherPopup()}
+            className="map-weather-button"
+          >
+            Погода сегодня
+          </button>
+
+          {isWeatherPopupOpen ? (
+            <section className="map-weather-popup" role="dialog" aria-label="Погода сегодня">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="m-0 text-xs font-semibold uppercase tracking-[0.14em] text-black">Погодный обзор</p>
+                  <p className="mt-1 mb-0 text-sm font-semibold text-black">
+                    {weatherAnchorPoint.name}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsWeatherPopupOpen(false)}
+                  className="rounded-md border border-[var(--line)] bg-white px-2 py-1 text-xs font-semibold text-black"
+                >
+                  Закрыть
+                </button>
+              </div>
+
+              {isWeatherLoading ? (
+                <p className="mt-3 mb-0 text-sm font-semibold text-black">Загрузка прогноза...</p>
+              ) : null}
+
+              {weatherError ? (
+                <p className="mt-3 mb-0 text-sm font-semibold text-[#b04444]">{weatherError}</p>
+              ) : null}
+
+              {weatherOverview && !isWeatherLoading ? (
+                <>
+                  <div className="mt-3 flex items-center gap-3">
+                    {weatherOverview.iconUrl ? (
+                      <img
+                        src={weatherOverview.iconUrl}
+                        alt={weatherOverview.description}
+                        className="h-14 w-14 rounded-lg border border-[var(--line)] bg-white"
+                      />
+                    ) : null}
+                    <div>
+                      <p className="m-0 text-2xl font-bold text-black">{Math.round(weatherOverview.temperatureC)}°C</p>
+                      <p className="m-0 text-sm text-black">{weatherOverview.description}</p>
+                      <p className="m-0 text-xs text-black">
+                        Ветер: {weatherOverview.windSpeedMs.toFixed(1)} м/с
+                        {weatherOverview.uvIndex !== null ? ` · УФ: ${weatherOverview.uvIndex.toFixed(1)}` : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {weatherOverview.warnings.length > 0 ? (
+                      weatherOverview.warnings.map((warning) => (
+                        <p
+                          key={warning}
+                          className="m-0 rounded-lg border border-[rgba(176,68,68,0.28)] bg-[rgba(255,232,232,0.86)] px-2 py-1 text-xs font-semibold text-[#7a2222]"
+                        >
+                          {warning}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="m-0 rounded-lg border border-[var(--line)] bg-[rgba(245,253,241,0.92)] px-2 py-1 text-xs font-semibold text-black">
+                        Существенных погодных рисков не найдено.
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="mt-3 mb-0 text-[11px] text-black/70">
+                    {weatherUpdatedAt ? `Обновлено: ${weatherUpdatedAt.toLocaleTimeString('ru-RU')}` : 'Нет времени обновления'}
+                  </p>
+                </>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => void refreshWeather()}
+                disabled={isWeatherLoading}
+                className="mt-3 w-full rounded-lg border border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.35)] px-3 py-2 text-xs font-semibold text-black disabled:opacity-60"
+              >
+                {isWeatherLoading ? 'Обновление...' : 'Обновить погоду'}
+              </button>
+            </section>
           ) : null}
         </section>
       </section>

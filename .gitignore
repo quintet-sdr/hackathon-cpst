@@ -187,3 +187,5 @@ $RECYCLE.BIN/
 
 prompt.md
 ~.lock*
+dist
+.env*
