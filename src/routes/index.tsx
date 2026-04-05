@@ -1,14 +1,30 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
-import { lectures, sciencePoints, sciencePointsById } from '#/features/science-guide/data'
+import {
+  lectures,
+  sciencePoints,
+  sciencePointsById,
+} from '#/features/science-guide/data'
 import {
   buildLectureRoute,
   buildMaxPointsDistanceRoute,
   buildUserRoute,
 } from '#/features/science-guide/routing'
 import { fetchWeatherOverview } from '#/features/science-guide/weather'
-import type { BuiltRoute, ScenarioType, SciencePoint } from '#/features/science-guide/types'
+import type {
+  BuiltRoute,
+  ScenarioType,
+  SciencePoint,
+} from '#/features/science-guide/types'
 import type { WeatherOverview } from '#/features/science-guide/weather'
 
 const ScienceGuideMap = lazy(async () => {
@@ -104,17 +120,24 @@ export const Route = createFileRoute('/')({
 
 function App() {
   const [activeScenario, setActiveScenario] = useState<ScenarioType>('lecture')
-  const [selectedLectureId, setSelectedLectureId] = useState<number>(lectures[0]?.id ?? 1)
+  const [selectedLectureId, setSelectedLectureId] = useState<number>(
+    lectures[0]?.id ?? 1,
+  )
   const [selectedPointIds, setSelectedPointIds] = useState<number[]>([])
   const [selectedPointId, setSelectedPointId] = useState<number | null>(null)
   const [hoveredPointId, setHoveredPointId] = useState<number | null>(null)
-  const [distanceLimitKm, setDistanceLimitKm] = useState<number>(INITIAL_DISTANCE_LIMIT_KM)
+  const [distanceLimitKm, setDistanceLimitKm] = useState<number>(
+    INITIAL_DISTANCE_LIMIT_KM,
+  )
   const [distanceLimitInput, setDistanceLimitInput] = useState<string>(
     formatDistanceLimitInput(INITIAL_DISTANCE_LIMIT_KM),
   )
-  const [distanceLimitError, setDistanceLimitError] = useState<string | null>(null)
+  const [distanceLimitError, setDistanceLimitError] = useState<string | null>(
+    null,
+  )
   const [routeResult, setRouteResult] = useState<BuiltRoute | null>(null)
-  const [lastBuiltSnapshot, setLastBuiltSnapshot] = useState<RouteBuildSnapshot | null>(null)
+  const [lastBuiltSnapshot, setLastBuiltSnapshot] =
+    useState<RouteBuildSnapshot | null>(null)
   const [routeError, setRouteError] = useState<string | null>(null)
   const [routeNotice, setRouteNotice] = useState<string | null>(null)
   const [isRouting, setIsRouting] = useState(false)
@@ -122,16 +145,21 @@ function App() {
   const [isWeatherPopupOpen, setIsWeatherPopupOpen] = useState(false)
   const [isWeatherLoading, setIsWeatherLoading] = useState(false)
   const [weatherError, setWeatherError] = useState<string | null>(null)
-  const [weatherOverview, setWeatherOverview] = useState<WeatherOverview | null>(null)
+  const [weatherOverview, setWeatherOverview] =
+    useState<WeatherOverview | null>(null)
   const [weatherUpdatedAt, setWeatherUpdatedAt] = useState<Date | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const weatherAbortRef = useRef<AbortController | null>(null)
 
   const selectedPoint =
-    (selectedPointId ? sciencePointsById.get(selectedPointId) : undefined) ?? null
+    (selectedPointId ? sciencePointsById.get(selectedPointId) : undefined) ??
+    null
 
   const basketPoints = useMemo(
-    () => selectedPointIds.map((id) => sciencePointsById.get(id)).filter(Boolean) as SciencePoint[],
+    () =>
+      selectedPointIds
+        .map((id) => sciencePointsById.get(id))
+        .filter(Boolean) as SciencePoint[],
     [selectedPointIds],
   )
 
@@ -148,8 +176,12 @@ function App() {
     }
 
     if (activeScenario === 'user-route') {
-      const nonBasketPoints = sciencePoints.filter((point) => !selectedPointIds.includes(point.id))
-      const basketPointsInOrder = sciencePoints.filter((point) => selectedPointIds.includes(point.id))
+      const nonBasketPoints = sciencePoints.filter(
+        (point) => !selectedPointIds.includes(point.id),
+      )
+      const basketPointsInOrder = sciencePoints.filter((point) =>
+        selectedPointIds.includes(point.id),
+      )
 
       return [...nonBasketPoints, ...basketPointsInOrder]
     }
@@ -163,12 +195,13 @@ function App() {
   )
 
   const canBuildRouteByScenario =
-    (activeScenario !== 'user-route' || selectedPointIds.length >= 2)
-    && (activeScenario !== 'distance-max' || distanceValidation.error === null)
+    (activeScenario !== 'user-route' || selectedPointIds.length >= 2) &&
+    (activeScenario !== 'distance-max' || distanceValidation.error === null)
 
   const canBuildRoute = canBuildRouteByScenario && !isRouting
 
-  const normalizedDistanceLimitForSnapshot = distanceValidation.valueKm ?? distanceLimitKm
+  const normalizedDistanceLimitForSnapshot =
+    distanceValidation.valueKm ?? distanceLimitKm
   const currentRouteSnapshot = useMemo<RouteBuildSnapshot>(
     () => ({
       scenario: activeScenario,
@@ -176,20 +209,24 @@ function App() {
       pointIds: selectedPointIds,
       distanceLimitKm: normalizedDistanceLimitForSnapshot,
     }),
-    [activeScenario, selectedLectureId, selectedPointIds, normalizedDistanceLimitForSnapshot],
+    [
+      activeScenario,
+      selectedLectureId,
+      selectedPointIds,
+      normalizedDistanceLimitForSnapshot,
+    ],
   )
 
   const isRouteOutOfSync =
-    canBuildRouteByScenario
-    && serializeRouteBuildSnapshot(currentRouteSnapshot)
-      !== serializeRouteBuildSnapshot(
-        lastBuiltSnapshot
-          ?? {
-            scenario: 'lecture',
-            lectureId: -1,
-            pointIds: [],
-            distanceLimitKm: -1,
-          },
+    canBuildRouteByScenario &&
+    serializeRouteBuildSnapshot(currentRouteSnapshot) !==
+      serializeRouteBuildSnapshot(
+        lastBuiltSnapshot ?? {
+          scenario: 'lecture',
+          lectureId: -1,
+          pointIds: [],
+          distanceLimitKm: -1,
+        },
       )
 
   const showLecturesSection = activeScenario === 'lecture'
@@ -233,9 +270,7 @@ function App() {
       }
 
       setWeatherError(
-        error instanceof Error
-          ? error.message
-          : 'Не удалось обновить погоду',
+        error instanceof Error ? error.message : 'Не удалось обновить погоду',
       )
     } finally {
       if (weatherAbortRef.current === controller) {
@@ -305,16 +340,24 @@ function App() {
           ? await buildLectureRoute(selectedLectureId, controller.signal)
           : activeScenario === 'user-route'
             ? await buildUserRoute(selectedPointIds, controller.signal)
-            : await buildMaxPointsDistanceRoute({
-                maxDistanceMeters: validatedDistanceLimitKm * 1000,
-                maxOverrunMeters: 1000,
-                candidatePointIds: sciencePoints.map((point) => point.id),
-                startPointId: selectedPointId ?? undefined,
-              }, controller.signal)
+            : await buildMaxPointsDistanceRoute(
+                {
+                  maxDistanceMeters: validatedDistanceLimitKm * 1000,
+                  maxOverrunMeters: 1000,
+                  candidatePointIds: sciencePoints.map((point) => point.id),
+                  startPointId: selectedPointId ?? undefined,
+                },
+                controller.signal,
+              )
 
       setRouteResult(result)
-      if (activeScenario === 'distance-max' && result.distanceSelectionMode === 'nearest') {
-        setRouteNotice('Точный маршрут в пределах лимита не найден. Показан ближайший маршрут в пределах +1 км.')
+      if (
+        activeScenario === 'distance-max' &&
+        result.distanceSelectionMode === 'nearest'
+      ) {
+        setRouteNotice(
+          'Точный маршрут в пределах лимита не найден. Показан ближайший маршрут в пределах +1 км.',
+        )
       }
       setLastBuiltSnapshot(snapshotForBuild)
     } catch (error) {
@@ -327,7 +370,8 @@ function App() {
         return
       }
 
-      const message = error instanceof Error ? error.message : 'Route build failed'
+      const message =
+        error instanceof Error ? error.message : 'Route build failed'
       setRouteError(
         reason === 'auto'
           ? `Автопостроение лекции не удалось: ${message}`
@@ -406,8 +450,12 @@ function App() {
     }
   }, [activeScenario])
 
-  const summaryDistanceKm = ((routeResult?.metrics.distanceMeters ?? 0) / 1000).toFixed(2)
-  const summaryDurationMin = Math.round(((routeResult?.metrics.durationSeconds ?? 0) / 60) * 2.5)
+  const summaryDistanceKm = (
+    (routeResult?.metrics.distanceMeters ?? 0) / 1000
+  ).toFixed(2)
+  const summaryDurationMin = Math.round(
+    ((routeResult?.metrics.durationSeconds ?? 0) / 60) * 2.5,
+  )
 
   return (
     <main className="planner-root px-3 pb-6 pt-5 sm:px-4 sm:pb-8">
@@ -427,7 +475,7 @@ function App() {
                   onClick={() => setActiveScenario(value as ScenarioType)}
                   className={`rounded-xl border px-3 py-2 text-left text-sm font-semibold ${
                     activeScenario === value
-                      ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.3)] text-[var(--sea-ink)]'
+                      ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.3)] text-white'
                       : 'border-[var(--line)] bg-[rgba(244,253,239,0.86)] text-black hover:bg-[rgba(250,255,247,0.98)]'
                   }`}
                 >
@@ -450,12 +498,20 @@ function App() {
                       onClick={() => setSelectedLectureId(lecture.id)}
                       className={`w-full rounded-xl border p-3 text-left ${
                         isActive
-                          ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.3)]'
+                          ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.3)] text-white'
                           : 'border-[var(--line)] bg-[rgba(244,253,239,0.86)] hover:bg-[rgba(250,255,247,0.98)]'
                       }`}
                     >
-                      <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">{lecture.title}</p>
-                      <p className="mt-1 text-xs text-black">{lecture.description}</p>
+                      <p
+                        className={`m-0 text-sm font-semibold ${isActive ? 'text-white' : 'text-[var(--sea-ink)]'}`}
+                      >
+                        {lecture.title}
+                      </p>
+                      <p
+                        className={`mt-1 text-xs ${isActive ? 'text-white' : 'text-black'}`}
+                      >
+                        {lecture.description}
+                      </p>
                     </button>
                   )
                 })}
@@ -466,7 +522,9 @@ function App() {
           {showBasketSection ? (
             <section className="mt-5">
               <div className="mb-2 flex items-center justify-between">
-                <p className="island-kicker island-kicker--light m-0">Корзина точек</p>
+                <p className="island-kicker island-kicker--light m-0">
+                  Корзина точек
+                </p>
                 <button
                   type="button"
                   onClick={() => setSelectedPointIds([])}
@@ -519,7 +577,9 @@ function App() {
           ) : null}
 
           <section className="mt-5">
-            <p className="island-kicker island-kicker--light mb-2">Список точек</p>
+            <p className="island-kicker island-kicker--light mb-2">
+              Список точек
+            </p>
             <div className="min-h-52 max-h-52 space-y-2 overflow-auto pr-1">
               {visibleSidebarPoints.map((point) => {
                 const inBasket = selectedPointIds.includes(point.id)
@@ -529,7 +589,7 @@ function App() {
                     key={`visible-${point.id}`}
                     className={`rounded-xl border px-3 py-2 ${
                       hoveredPointId === point.id
-                        ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.26)]'
+                        ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.26)] text-white'
                         : selectedPointIds.includes(point.id)
                           ? 'border-[rgba(27,102,43,0.38)] bg-[rgba(232,250,221,0.92)]'
                           : 'border-[var(--line)] bg-[rgba(244,253,239,0.86)]'
@@ -543,8 +603,14 @@ function App() {
                         onClick={() => setSelectedPointId(point.id)}
                         className="flex-1 text-left"
                       >
-                        <p className="m-0 text-sm font-semibold text-black">{point.name}</p>
-                        <p className="mt-0.5 text-xs text-black">
+                        <p
+                          className={`m-0 text-sm font-semibold ${hoveredPointId === point.id || selectedPointIds.includes(point.id) ? 'text-white' : 'text-black'}`}
+                        >
+                          {point.name}
+                        </p>
+                        <p
+                          className={`mt-0.5 text-xs ${hoveredPointId === point.id || selectedPointIds.includes(point.id) ? 'text-white' : 'text-black'}`}
+                        >
                           {activeScenario === 'distance-max'
                             ? 'Точка доступна для маршрута'
                             : inBasket}
@@ -568,7 +634,11 @@ function App() {
                               ? `Удалить ${point.name} из корзины`
                               : `Добавить ${point.name} в корзину`
                           }
-                          title={inBasket ? 'Удалить из корзины' : 'Добавить в корзину'}
+                          title={
+                            inBasket
+                              ? 'Удалить из корзины'
+                              : 'Добавить в корзину'
+                          }
                         >
                           {inBasket ? '−' : '+'}
                         </button>
@@ -582,18 +652,23 @@ function App() {
 
           {activeScenario === 'user-route' ? (
             <p className="mt-2 rounded-xl border border-dashed border-[var(--line)] bg-white/35 px-3 py-2 text-xs text-black">
-              Для пользовательского маршрута выберите минимум 2 точки. Порядок в корзине задает порядок обхода.
+              Для пользовательского маршрута выберите минимум 2 точки. Порядок в
+              корзине задает порядок обхода.
             </p>
           ) : null}
 
           {activeScenario === 'distance-max' ? (
             <section className="mt-5">
-              <p className="island-kicker island-kicker--light mb-2">Лимит дистанции</p>
+              <p className="island-kicker island-kicker--light mb-2">
+                Лимит дистанции
+              </p>
               <label className="block">
                 <span className="text-xs text-white">км</span>
                 <input
                   value={distanceLimitInput}
-                  onChange={(event) => handleDistanceLimitInputChange(event.target.value)}
+                  onChange={(event) =>
+                    handleDistanceLimitInputChange(event.target.value)
+                  }
                   onBlur={handleDistanceLimitBlur}
                   type="text"
                   inputMode="decimal"
@@ -602,7 +677,9 @@ function App() {
                 />
               </label>
               {distanceLimitError ? (
-                <p className="mt-2 text-xs font-semibold text-[#ba4d4d]">{distanceLimitError}</p>
+                <p className="mt-2 text-xs font-semibold text-[#ba4d4d]">
+                  {distanceLimitError}
+                </p>
               ) : null}
             </section>
           ) : null}
@@ -612,22 +689,32 @@ function App() {
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <p className="m-0 text-xs text-black">Длина</p>
-                <p className="m-0 text-sm font-semibold text-black">{summaryDistanceKm} км</p>
+                <p className="m-0 text-sm font-semibold text-black">
+                  {summaryDistanceKm} км
+                </p>
               </div>
               <div>
                 <p className="m-0 text-xs text-black">Время</p>
-                <p className="m-0 text-sm font-semibold text-black">{summaryDurationMin} мин</p>
+                <p className="m-0 text-sm font-semibold text-black">
+                  {summaryDurationMin} мин
+                </p>
               </div>
               <div>
                 <p className="m-0 text-xs text-black">Точки</p>
-                <p className="m-0 text-sm font-semibold text-black">{routeResult?.waypointIds.length ?? 0}</p>
+                <p className="m-0 text-sm font-semibold text-black">
+                  {routeResult?.waypointIds.length ?? 0}
+                </p>
               </div>
             </div>
             {routeError ? (
-              <p className="mt-2 text-xs font-semibold text-[#ba4d4d]">{routeError}</p>
+              <p className="mt-2 text-xs font-semibold text-[#ba4d4d]">
+                {routeError}
+              </p>
             ) : null}
             {routeNotice ? (
-              <p className="mt-2 text-xs font-semibold text-black">{routeNotice}</p>
+              <p className="mt-2 text-xs font-semibold text-black">
+                {routeNotice}
+              </p>
             ) : null}
           </section>
 
@@ -636,8 +723,12 @@ function App() {
             {selectedPoint ? (
               <>
                 <div className="h-28 rounded-xl border border-[var(--line)] bg-[linear-gradient(130deg,rgba(165,236,127,0.28),rgba(12,71,32,0.14))]" />
-                <p className="mt-3 mb-1 text-sm font-semibold text-black">{selectedPoint.name}</p>
-                <p className="m-0 text-xs text-black">{selectedPoint.description}</p>
+                <p className="mt-3 mb-1 text-sm font-semibold text-black">
+                  {selectedPoint.name}
+                </p>
+                <p className="m-0 text-xs text-black">
+                  {selectedPoint.description}
+                </p>
               </>
             ) : (
               <p className="m-0 text-xs text-black">
@@ -650,11 +741,11 @@ function App() {
         <section className="island-shell rise-in rounded-3xl p-2 sm:p-3">
           {isClient ? (
             <Suspense
-              fallback={(
+              fallback={
                 <div className="planner-map grid place-items-center rounded-[1.15rem] border border-[var(--line)] bg-[rgba(244,253,239,0.86)] text-sm font-semibold text-black">
                   Загрузка карты...
                 </div>
-              )}
+              }
             >
               <ScienceGuideMap
                 points={sciencePoints}
@@ -695,10 +786,16 @@ function App() {
           </button>
 
           {isWeatherPopupOpen ? (
-            <section className="map-weather-popup" role="dialog" aria-label="Погода сегодня">
+            <section
+              className="map-weather-popup"
+              role="dialog"
+              aria-label="Погода сегодня"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="m-0 text-xs font-semibold uppercase tracking-[0.14em] text-black">Погодный обзор</p>
+                  <p className="m-0 text-xs font-semibold uppercase tracking-[0.14em] text-black">
+                    Погодный обзор
+                  </p>
                   <p className="mt-1 mb-0 text-sm font-semibold text-black">
                     {weatherAnchorPoint.name}
                   </p>
@@ -713,11 +810,15 @@ function App() {
               </div>
 
               {isWeatherLoading ? (
-                <p className="mt-3 mb-0 text-sm font-semibold text-black">Загрузка прогноза...</p>
+                <p className="mt-3 mb-0 text-sm font-semibold text-black">
+                  Загрузка прогноза...
+                </p>
               ) : null}
 
               {weatherError ? (
-                <p className="mt-3 mb-0 text-sm font-semibold text-[#b04444]">{weatherError}</p>
+                <p className="mt-3 mb-0 text-sm font-semibold text-[#b04444]">
+                  {weatherError}
+                </p>
               ) : null}
 
               {weatherOverview && !isWeatherLoading ? (
@@ -731,11 +832,17 @@ function App() {
                       />
                     ) : null}
                     <div>
-                      <p className="m-0 text-2xl font-bold text-black">{Math.round(weatherOverview.temperatureC)}°C</p>
-                      <p className="m-0 text-sm text-black">{weatherOverview.description}</p>
+                      <p className="m-0 text-2xl font-bold text-black">
+                        {Math.round(weatherOverview.temperatureC)}°C
+                      </p>
+                      <p className="m-0 text-sm text-black">
+                        {weatherOverview.description}
+                      </p>
                       <p className="m-0 text-xs text-black">
                         Ветер: {weatherOverview.windSpeedMs.toFixed(1)} м/с
-                        {weatherOverview.uvIndex !== null ? ` · УФ: ${weatherOverview.uvIndex.toFixed(1)}` : ''}
+                        {weatherOverview.uvIndex !== null
+                          ? ` · УФ: ${weatherOverview.uvIndex.toFixed(1)}`
+                          : ''}
                       </p>
                     </div>
                   </div>
@@ -758,7 +865,9 @@ function App() {
                   </div>
 
                   <p className="mt-3 mb-0 text-[11px] text-black/70">
-                    {weatherUpdatedAt ? `Обновлено: ${weatherUpdatedAt.toLocaleTimeString('ru-RU')}` : 'Нет времени обновления'}
+                    {weatherUpdatedAt
+                      ? `Обновлено: ${weatherUpdatedAt.toLocaleTimeString('ru-RU')}`
+                      : 'Нет времени обновления'}
                   </p>
                 </>
               ) : null}
