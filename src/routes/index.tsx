@@ -407,7 +407,7 @@ function App() {
   }, [activeScenario])
 
   const summaryDistanceKm = ((routeResult?.metrics.distanceMeters ?? 0) / 1000).toFixed(2)
-  const summaryDurationMin = Math.round((routeResult?.metrics.durationSeconds ?? 0) / 60)
+  const summaryDurationMin = Math.round(((routeResult?.metrics.durationSeconds ?? 0) / 60) * 2.5)
 
   return (
     <main className="planner-root px-3 pb-6 pt-5 sm:px-4 sm:pb-8">
