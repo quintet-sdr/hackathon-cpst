@@ -189,3 +189,4 @@ prompt.md
 ~.lock*
 dist
 .env*
+*.patch

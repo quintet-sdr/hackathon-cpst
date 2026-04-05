@@ -406,7 +406,7 @@ function App() {
       <section className="planner-grid gap-4">
         <aside className="island-shell rise-in planner-sidebar rounded-3xl p-4 sm:p-5">
           <section>
-            <p className="island-kicker mb-2">Сценарий</p>
+            <p className="island-kicker island-kicker--light mb-2">Сценарий</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
               {[
                 ['lecture', 'Лекция'],
@@ -431,7 +431,7 @@ function App() {
 
           {showLecturesSection ? (
             <section className="mt-5">
-              <p className="island-kicker mb-2">Лекции</p>
+              <p className="island-kicker island-kicker--light mb-2">Лекции</p>
               <div className="space-y-2">
                 {lectures.map((lecture) => {
                   const isActive = lecture.id === selectedLectureId
@@ -458,7 +458,7 @@ function App() {
           {showBasketSection ? (
             <section className="mt-5">
               <div className="mb-2 flex items-center justify-between">
-                <p className="island-kicker m-0">Корзина точек</p>
+                <p className="island-kicker island-kicker--light m-0">Корзина точек</p>
                 <button
                   type="button"
                   onClick={() => setSelectedPointIds([])}
@@ -511,7 +511,7 @@ function App() {
           ) : null}
 
           <section className="mt-5">
-            <p className="island-kicker mb-2">Список точек</p>
+            <p className="island-kicker island-kicker--light mb-2">Список точек</p>
             <div className="min-h-52 max-h-52 space-y-2 overflow-auto pr-1">
               {visibleSidebarPoints.map((point) => {
                 const inBasket = selectedPointIds.includes(point.id)
@@ -580,9 +580,9 @@ function App() {
 
           {activeScenario === 'distance-max' ? (
             <section className="mt-5">
-              <p className="island-kicker mb-2">Лимит дистанции</p>
+              <p className="island-kicker island-kicker--light mb-2">Лимит дистанции</p>
               <label className="block">
-                <span className="text-xs text-black">км</span>
+                <span className="text-xs text-white">км</span>
                 <input
                   value={distanceLimitInput}
                   onChange={(event) => handleDistanceLimitInputChange(event.target.value)}
