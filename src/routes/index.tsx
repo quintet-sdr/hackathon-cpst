@@ -1,15 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { divIcon } from 'leaflet'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DivIcon } from 'leaflet'
-import {
-  MapContainer,
-  Marker,
-  Polyline,
-  TileLayer,
-  Tooltip,
-} from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 
 import { lectures, sciencePoints, sciencePointsById } from '#/features/science-guide/data'
 import {
@@ -19,7 +9,13 @@ import {
 } from '#/features/science-guide/routing'
 import type { BuiltRoute, ScenarioType, SciencePoint } from '#/features/science-guide/types'
 
-type MarkerVariant = 'default' | 'route' | 'basket' | 'hovered' | 'selected'
+const ScienceGuideMap = lazy(async () => {
+  const module = await import('../components/ScienceGuideMap')
+
+  return {
+    default: module.ScienceGuideMap,
+  }
+})
 
 const INITIAL_DISTANCE_LIMIT_KM = 4
 
@@ -61,16 +57,10 @@ function parseDistanceLimitInputStrict(rawValue: string): {
   return { valueKm, error: null }
 }
 
-function makePointIcon(variant: MarkerVariant): DivIcon {
-  return divIcon({
-    className: `science-point-icon science-point-icon--${variant}`,
-    html: '<span class="science-point-core"></span>',
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
-  })
-}
-
-export const Route = createFileRoute('/')({ component: App })
+export const Route = createFileRoute('/')({
+  ssr: false,
+  component: App,
+})
 
 function App() {
   const [activeScenario, setActiveScenario] = useState<ScenarioType>('lecture')
@@ -86,18 +76,8 @@ function App() {
   const [routeResult, setRouteResult] = useState<BuiltRoute | null>(null)
   const [routeError, setRouteError] = useState<string | null>(null)
   const [isRouting, setIsRouting] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
-
-  const markerIcons = useMemo<Record<MarkerVariant, DivIcon>>(
-    () => ({
-      default: makePointIcon('default'),
-      route: makePointIcon('route'),
-      basket: makePointIcon('basket'),
-      hovered: makePointIcon('hovered'),
-      selected: makePointIcon('selected'),
-    }),
-    [],
-  )
 
   const selectedPoint =
     (selectedPointId ? sciencePointsById.get(selectedPointId) : undefined) ?? null
@@ -105,11 +85,6 @@ function App() {
   const basketPoints = useMemo(
     () => selectedPointIds.map((id) => sciencePointsById.get(id)).filter(Boolean) as SciencePoint[],
     [selectedPointIds],
-  )
-
-  const routeWaypointSet = useMemo(
-    () => new Set(routeResult?.waypointIds ?? []),
-    [routeResult?.waypointIds],
   )
 
   const visibleSidebarPoints = useMemo(() => {
@@ -239,6 +214,10 @@ function App() {
     setDistanceLimitInput(value)
     setDistanceLimitError(null)
   }
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
     if (activeScenario === 'lecture') {
@@ -496,55 +475,30 @@ function App() {
         </aside>
 
         <section className="island-shell rise-in rounded-3xl p-2 sm:p-3">
-          <MapContainer
-            bounds={[
-              [55.741, 48.697],
-              [55.785, 48.768],
-            ]}
-            className="planner-map rounded-[1.15rem]"
-          >
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
-            {sciencePoints.map((point) => {
-              const isHovered = hoveredPointId === point.id
-              const isSelected = selectedPointId === point.id
-              const inBasket = selectedPointIds.includes(point.id)
-              const inRoute = routeWaypointSet.has(point.id)
-              const markerVariant: MarkerVariant = isSelected
-                ? 'selected'
-                : isHovered
-                  ? 'hovered'
-                  : inBasket
-                    ? 'basket'
-                    : inRoute
-                      ? 'route'
-                      : 'default'
-
-              return (
-                <Marker
-                  key={point.id}
-                  position={[point.lat, point.lon]}
-                  icon={markerIcons[markerVariant]}
-                  eventHandlers={{
-                    mouseover: () => setHoveredPointId(point.id),
-                    mouseout: () => setHoveredPointId(null),
-                    click: () => setSelectedPointId(point.id),
-                  }}
-                >
-                  <Tooltip>
-                    {point.name}
-                  </Tooltip>
-                </Marker>
-              )
-            })}
-
-            {routeResult ? (
-              <Polyline
-                positions={routeResult.coordinates}
-                pathOptions={{ color: '#1d7f86', weight: 5, opacity: 0.9 }}
+          {isClient ? (
+            <Suspense
+              fallback={(
+                <div className="planner-map grid place-items-center rounded-[1.15rem] border border-[var(--line)] bg-white/45 text-sm font-semibold text-[var(--sea-ink-soft)]">
+                  Загрузка карты...
+                </div>
+              )}
+            >
+              <ScienceGuideMap
+                points={sciencePoints}
+                selectedPointIds={selectedPointIds}
+                selectedPointId={selectedPointId}
+                hoveredPointId={hoveredPointId}
+                routeWaypointIds={routeResult?.waypointIds ?? []}
+                routeCoordinates={routeResult?.coordinates ?? null}
+                onHoverPoint={setHoveredPointId}
+                onSelectPoint={setSelectedPointId}
               />
-            ) : null}
-          </MapContainer>
+            </Suspense>
+          ) : (
+            <div className="planner-map grid place-items-center rounded-[1.15rem] border border-[var(--line)] bg-white/45 text-sm font-semibold text-[var(--sea-ink-soft)]">
+              Подготовка клиентского режима...
+            </div>
+          )}
         </section>
       </section>
     </main>
