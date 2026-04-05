@@ -271,6 +271,56 @@ a {
   animation: rise-in 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.planner-root {
+  width: min(1320px, calc(100% - 1.2rem));
+  margin-inline: auto;
+}
+
+.planner-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+}
+
+.planner-sidebar {
+  max-height: calc(100vh - 108px);
+  overflow: auto;
+}
+
+.planner-map {
+  height: calc(100vh - 138px);
+  min-height: 580px;
+  width: 100%;
+}
+
+.planner-map .leaflet-control-attribution {
+  border-radius: 10px;
+  border: 1px solid rgba(23, 58, 64, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--sea-ink-soft);
+}
+
+@media (max-width: 1080px) {
+  .planner-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-sidebar {
+    max-height: 440px;
+  }
+
+  .planner-map {
+    height: 68vh;
+    min-height: 460px;
+  }
+}
+
+@media (max-width: 640px) {
+  .planner-map {
+    height: 62vh;
+    min-height: 400px;
+  }
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
