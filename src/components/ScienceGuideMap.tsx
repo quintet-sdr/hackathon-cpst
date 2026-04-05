@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import {
   MapContainer,
   Marker,
+  Popup,
   Polyline,
   TileLayer,
   Tooltip,
@@ -23,6 +24,8 @@ export interface ScienceGuideMapProps {
   routeCoordinates: Array<[number, number]> | null
   onHoverPoint: (pointId: number | null) => void
   onSelectPoint: (pointId: number) => void
+  onTogglePointInBasket: (pointId: number) => void
+  canTogglePointInBasket: boolean
 }
 
 function makePointIcon(variant: MarkerVariant): DivIcon {
@@ -43,6 +46,8 @@ export function ScienceGuideMap({
   routeCoordinates,
   onHoverPoint,
   onSelectPoint,
+  onTogglePointInBasket,
+  canTogglePointInBasket,
 }: ScienceGuideMapProps) {
   const markerIcons = useMemo<Record<MarkerVariant, DivIcon>>(
     () => ({
@@ -96,6 +101,22 @@ export function ScienceGuideMap({
             <Tooltip>
               {point.name}
             </Tooltip>
+            <Popup>
+              <div className="space-y-2">
+                <p className="m-0 text-sm font-semibold text-black">{point.name}</p>
+                {canTogglePointInBasket ? (
+                  <button
+                    type="button"
+                    onClick={() => onTogglePointInBasket(point.id)}
+                    className="rounded-md border border-[var(--line)] bg-[rgba(244,253,239,0.9)] px-2 py-1 text-xs font-semibold text-black hover:bg-[rgba(250,255,247,0.98)]"
+                  >
+                    {inBasket ? 'Убрать из маршрута' : 'Добавить в маршрут'}
+                  </button>
+                ) : (
+                  <p className="m-0 text-xs text-black">В этом сценарии корзина недоступна.</p>
+                )}
+              </div>
+            </Popup>
           </Marker>
         )
       })}

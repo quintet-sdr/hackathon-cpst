@@ -19,6 +19,13 @@ const ScienceGuideMap = lazy(async () => {
 
 const INITIAL_DISTANCE_LIMIT_KM = 4
 
+interface RouteBuildSnapshot {
+  scenario: ScenarioType
+  lectureId: number
+  pointIds: number[]
+  distanceLimitKm: number
+}
+
 function formatDistanceLimitInput(valueKm: number): string {
   return Number.isInteger(valueKm) ? String(valueKm) : valueKm.toFixed(1)
 }
@@ -84,6 +91,10 @@ function parseDistanceLimitInputStrict(rawValue: string): {
   return { valueKm, error: null }
 }
 
+function serializeRouteBuildSnapshot(snapshot: RouteBuildSnapshot): string {
+  return JSON.stringify(snapshot)
+}
+
 export const Route = createFileRoute('/')({
   ssr: false,
   component: App,
@@ -101,6 +112,7 @@ function App() {
   )
   const [distanceLimitError, setDistanceLimitError] = useState<string | null>(null)
   const [routeResult, setRouteResult] = useState<BuiltRoute | null>(null)
+  const [lastBuiltSnapshot, setLastBuiltSnapshot] = useState<RouteBuildSnapshot | null>(null)
   const [routeError, setRouteError] = useState<string | null>(null)
   const [isRouting, setIsRouting] = useState(false)
   const [isClient, setIsClient] = useState(false)
@@ -141,10 +153,35 @@ function App() {
     [distanceLimitInput],
   )
 
-  const canBuildRoute =
-    !isRouting
-    && (activeScenario !== 'user-route' || selectedPointIds.length >= 2)
+  const canBuildRouteByScenario =
+    (activeScenario !== 'user-route' || selectedPointIds.length >= 2)
     && (activeScenario !== 'distance-max' || distanceValidation.error === null)
+
+  const canBuildRoute = canBuildRouteByScenario && !isRouting
+
+  const normalizedDistanceLimitForSnapshot = distanceValidation.valueKm ?? distanceLimitKm
+  const currentRouteSnapshot = useMemo<RouteBuildSnapshot>(
+    () => ({
+      scenario: activeScenario,
+      lectureId: selectedLectureId,
+      pointIds: selectedPointIds,
+      distanceLimitKm: normalizedDistanceLimitForSnapshot,
+    }),
+    [activeScenario, selectedLectureId, selectedPointIds, normalizedDistanceLimitForSnapshot],
+  )
+
+  const isRouteOutOfSync =
+    canBuildRouteByScenario
+    && serializeRouteBuildSnapshot(currentRouteSnapshot)
+      !== serializeRouteBuildSnapshot(
+        lastBuiltSnapshot
+          ?? {
+            scenario: 'lecture',
+            lectureId: -1,
+            pointIds: [],
+            distanceLimitKm: -1,
+          },
+      )
 
   const showLecturesSection = activeScenario === 'lecture'
   const showBasketSection = activeScenario !== 'distance-max'
@@ -184,6 +221,13 @@ function App() {
       setDistanceLimitError(null)
     }
 
+    const snapshotForBuild: RouteBuildSnapshot = {
+      scenario: activeScenario,
+      lectureId: selectedLectureId,
+      pointIds: selectedPointIds,
+      distanceLimitKm: validatedDistanceLimitKm,
+    }
+
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -203,6 +247,7 @@ function App() {
               }, controller.signal)
 
       setRouteResult(result)
+      setLastBuiltSnapshot(snapshotForBuild)
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         if (!controller.signal.aborted) {
@@ -242,6 +287,15 @@ function App() {
   function removePointFromBasket(pointId: number) {
     setSelectedPointIds((current) => current.filter((id) => id !== pointId))
     setSelectedPointId(pointId)
+  }
+
+  function togglePointInBasket(pointId: number) {
+    if (selectedPointIds.includes(pointId)) {
+      removePointFromBasket(pointId)
+      return
+    }
+
+    addPointToBasket(pointId)
   }
 
   function handleDistanceLimitInputChange(value: string) {
@@ -342,7 +396,7 @@ function App() {
                 </button>
               </div>
 
-              <div className="max-h-44 space-y-2 overflow-auto pr-1">
+              <div className="min-h-32 max-h-44 space-y-2 overflow-auto pr-1">
                 {basketPoints.length === 0 ? (
                   <p className="m-0 rounded-xl border border-dashed border-[var(--line)] bg-[rgba(248,255,244,0.88)] px-3 py-2 text-xs text-black">
                     Добавляйте точки через кнопку + в списке ниже.
@@ -386,7 +440,7 @@ function App() {
 
           <section className="mt-5">
             <p className="island-kicker mb-2">Список точек</p>
-            <div className="max-h-52 space-y-2 overflow-auto pr-1">
+            <div className="min-h-52 max-h-52 space-y-2 overflow-auto pr-1">
               {visibleSidebarPoints.map((point) => {
                 const inBasket = selectedPointIds.includes(point.id)
 
@@ -491,14 +545,6 @@ function App() {
                 <p className="m-0 text-sm font-semibold text-black">{routeResult?.waypointIds.length ?? 0}</p>
               </div>
             </div>
-            <button
-              type="button"
-              disabled={!canBuildRoute}
-              onClick={() => void handleBuildRoute('manual')}
-              className="mt-3 w-full rounded-xl border border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.28)] px-3 py-2 text-sm font-semibold text-black hover:bg-[rgba(165,236,127,0.4)] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isRouting ? 'Построение...' : 'Построить маршрут'}
-            </button>
             {routeError ? (
               <p className="mt-2 text-xs font-semibold text-[#ba4d4d]">{routeError}</p>
             ) : null}
@@ -538,6 +584,8 @@ function App() {
                 routeCoordinates={routeResult?.coordinates ?? null}
                 onHoverPoint={setHoveredPointId}
                 onSelectPoint={setSelectedPointId}
+                onTogglePointInBasket={togglePointInBasket}
+                canTogglePointInBasket={showBasketSection}
               />
             </Suspense>
           ) : (
@@ -545,6 +593,17 @@ function App() {
               Подготовка клиентского режима...
             </div>
           )}
+
+          {isRouteOutOfSync ? (
+            <button
+              type="button"
+              disabled={!canBuildRoute}
+              onClick={() => void handleBuildRoute('manual')}
+              className="map-sync-button"
+            >
+              {isRouting ? 'Обновление...' : 'Обновить маршрут'}
+            </button>
+          ) : null}
         </section>
       </section>
     </main>

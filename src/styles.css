@@ -273,24 +273,53 @@ a {
 }
 
 .planner-root {
-  width: min(1320px, calc(100% - 1.2rem));
+  width: min(1440px, calc(100% - 1rem));
   margin-inline: auto;
 }
 
 .planner-grid {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  grid-template-columns: 1fr;
 }
 
 .planner-sidebar {
-  max-height: calc(100vh - 1.2rem);
+  position: absolute;
+  top: 0.8rem;
+  left: 0.8rem;
+  z-index: 550;
+  width: min(390px, calc(100% - 1.6rem));
+  max-height: calc(100vh - 1.6rem);
   overflow: auto;
 }
 
 .planner-map {
-  height: calc(100vh - 1.2rem);
+  height: calc(100vh - 1rem);
   min-height: 580px;
   width: 100%;
+}
+
+.map-sync-button {
+  position: absolute;
+  right: 1.2rem;
+  bottom: 1.2rem;
+  z-index: 560;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(27, 102, 43, 0.42);
+  background: rgba(165, 236, 127, 0.9);
+  padding: 0.65rem 0.95rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #000;
+  box-shadow: 0 8px 20px rgba(11, 54, 24, 0.22);
+}
+
+.map-sync-button:hover {
+  background: rgba(165, 236, 127, 0.98);
+}
+
+.map-sync-button:disabled {
+  opacity: 0.65;
 }
 
 .planner-map .leaflet-control-attribution {
@@ -367,12 +396,19 @@ a {
   }
 
   .planner-sidebar {
+    position: static;
+    width: 100%;
     max-height: 440px;
   }
 
   .planner-map {
     height: 68vh;
     min-height: 460px;
+  }
+
+  .map-sync-button {
+    right: 1rem;
+    bottom: 1rem;
   }
 }
 
