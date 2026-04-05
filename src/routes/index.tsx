@@ -23,6 +23,33 @@ function formatDistanceLimitInput(valueKm: number): string {
   return Number.isInteger(valueKm) ? String(valueKm) : valueKm.toFixed(1)
 }
 
+function sanitizeDistanceInput(rawValue: string): string {
+  const normalized = rawValue.replace(',', '.').replace(/[^\d.]/g, '')
+  let value = ''
+  let hasDot = false
+
+  for (const char of normalized) {
+    if (char === '.') {
+      if (hasDot) {
+        continue
+      }
+
+      hasDot = true
+      value += char
+      continue
+    }
+
+    value += char
+  }
+
+  // Keep the input compact: "05" -> "5", but preserve "0." while typing decimals.
+  if (/^0\d+/.test(value) && !value.startsWith('0.')) {
+    value = String(Number(value))
+  }
+
+  return value
+}
+
 function parseDistanceLimitInputStrict(rawValue: string): {
   valueKm: number | null
   error: string | null
@@ -99,8 +126,15 @@ function App() {
         .filter((point): point is SciencePoint => Boolean(point))
     }
 
+    if (activeScenario === 'user-route') {
+      const nonBasketPoints = sciencePoints.filter((point) => !selectedPointIds.includes(point.id))
+      const basketPointsInOrder = sciencePoints.filter((point) => selectedPointIds.includes(point.id))
+
+      return [...nonBasketPoints, ...basketPointsInOrder]
+    }
+
     return sciencePoints
-  }, [activeScenario, selectedLectureId])
+  }, [activeScenario, selectedLectureId, selectedPointIds])
 
   const distanceValidation = useMemo(
     () => parseDistanceLimitInputStrict(distanceLimitInput),
@@ -111,6 +145,9 @@ function App() {
     !isRouting
     && (activeScenario !== 'user-route' || selectedPointIds.length >= 2)
     && (activeScenario !== 'distance-max' || distanceValidation.error === null)
+
+  const showLecturesSection = activeScenario === 'lecture'
+  const showBasketSection = activeScenario !== 'distance-max'
 
   function handleDistanceLimitBlur() {
     const parsed = parseDistanceLimitInputStrict(distanceLimitInput)
@@ -161,11 +198,8 @@ function App() {
             ? await buildUserRoute(selectedPointIds, controller.signal)
             : await buildMaxPointsDistanceRoute({
                 maxDistanceMeters: validatedDistanceLimitKm * 1000,
-                candidatePointIds:
-                  selectedPointIds.length >= 2
-                    ? selectedPointIds
-                    : sciencePoints.map((point) => point.id),
-                startPointId: selectedPointIds[0],
+                candidatePointIds: sciencePoints.map((point) => point.id),
+                startPointId: selectedPointId ?? undefined,
               }, controller.signal)
 
       setRouteResult(result)
@@ -211,7 +245,7 @@ function App() {
   }
 
   function handleDistanceLimitInputChange(value: string) {
-    setDistanceLimitInput(value)
+    setDistanceLimitInput(sanitizeDistanceInput(value))
     setDistanceLimitError(null)
   }
 
@@ -259,8 +293,8 @@ function App() {
                   onClick={() => setActiveScenario(value as ScenarioType)}
                   className={`rounded-xl border px-3 py-2 text-left text-sm font-semibold ${
                     activeScenario === value
-                      ? 'border-[rgba(40,142,146,0.58)] bg-[rgba(79,184,178,0.19)] text-[var(--sea-ink)]'
-                      : 'border-[var(--line)] bg-white/45 text-[var(--sea-ink-soft)] hover:bg-white/72'
+                      ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.3)] text-[var(--sea-ink)]'
+                      : 'border-[var(--line)] bg-[rgba(244,253,239,0.86)] text-black hover:bg-[rgba(250,255,247,0.98)]'
                   }`}
                 >
                   {label}
@@ -269,82 +303,86 @@ function App() {
             </div>
           </section>
 
-          <section className="mt-5">
-            <p className="island-kicker mb-2">Лекции</p>
-            <div className="space-y-2">
-              {lectures.map((lecture) => {
-                const isActive = lecture.id === selectedLectureId
-                return (
-                  <button
-                    key={lecture.id}
-                    type="button"
-                    onClick={() => setSelectedLectureId(lecture.id)}
-                    className={`w-full rounded-xl border p-3 text-left ${
-                      isActive
-                        ? 'border-[rgba(40,142,146,0.58)] bg-[rgba(79,184,178,0.17)]'
-                        : 'border-[var(--line)] bg-white/50 hover:bg-white/72'
-                    }`}
-                  >
-                    <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">{lecture.title}</p>
-                    <p className="mt-1 text-xs text-[var(--sea-ink-soft)]">{lecture.description}</p>
-                  </button>
-                )
-              })}
-            </div>
-          </section>
+          {showLecturesSection ? (
+            <section className="mt-5">
+              <p className="island-kicker mb-2">Лекции</p>
+              <div className="space-y-2">
+                {lectures.map((lecture) => {
+                  const isActive = lecture.id === selectedLectureId
+                  return (
+                    <button
+                      key={lecture.id}
+                      type="button"
+                      onClick={() => setSelectedLectureId(lecture.id)}
+                      className={`w-full rounded-xl border p-3 text-left ${
+                        isActive
+                          ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.3)]'
+                          : 'border-[var(--line)] bg-[rgba(244,253,239,0.86)] hover:bg-[rgba(250,255,247,0.98)]'
+                      }`}
+                    >
+                      <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">{lecture.title}</p>
+                      <p className="mt-1 text-xs text-black">{lecture.description}</p>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          ) : null}
 
-          <section className="mt-5">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="island-kicker m-0">Корзина точек</p>
-              <button
-                type="button"
-                onClick={() => setSelectedPointIds([])}
-                className="rounded-lg border border-[var(--line)] bg-white/55 px-2 py-1 text-xs font-semibold text-[var(--sea-ink-soft)] hover:bg-white/78"
-              >
-                Очистить
-              </button>
-            </div>
+          {showBasketSection ? (
+            <section className="mt-5">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="island-kicker m-0">Корзина точек</p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPointIds([])}
+                  className="rounded-lg border border-[var(--line)] bg-[rgba(244,253,239,0.86)] px-2 py-1 text-xs font-semibold text-black hover:bg-[rgba(250,255,247,0.98)]"
+                >
+                  Очистить
+                </button>
+              </div>
 
-            <div className="max-h-44 space-y-2 overflow-auto pr-1">
-              {basketPoints.length === 0 ? (
-                <p className="m-0 rounded-xl border border-dashed border-[var(--line)] bg-white/35 px-3 py-2 text-xs text-[var(--sea-ink-soft)]">
-                  Добавляйте точки через кнопку + в списке ниже.
-                </p>
-              ) : (
-                basketPoints.map((point) => (
-                  <div
-                    key={point.id}
-                    className={`rounded-xl border px-3 py-2 ${
-                      hoveredPointId === point.id
-                        ? 'border-[rgba(40,142,146,0.58)] bg-[rgba(79,184,178,0.16)]'
-                        : 'border-[var(--line)] bg-white/45'
-                    }`}
-                    onMouseEnter={() => setHoveredPointId(point.id)}
-                    onMouseLeave={() => setHoveredPointId(null)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPointId(point.id)}
-                        className="flex-1 text-left text-sm font-semibold text-[var(--sea-ink)]"
-                      >
-                        {point.name}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removePointFromBasket(point.id)}
-                        className="point-action-button point-action-button--remove"
-                        aria-label={`Удалить ${point.name} из корзины`}
-                        title="Удалить из корзины"
-                      >
-                        −
-                      </button>
+              <div className="max-h-44 space-y-2 overflow-auto pr-1">
+                {basketPoints.length === 0 ? (
+                  <p className="m-0 rounded-xl border border-dashed border-[var(--line)] bg-[rgba(248,255,244,0.88)] px-3 py-2 text-xs text-black">
+                    Добавляйте точки через кнопку + в списке ниже.
+                  </p>
+                ) : (
+                  basketPoints.map((point) => (
+                    <div
+                      key={point.id}
+                      className={`rounded-xl border px-3 py-2 ${
+                        hoveredPointId === point.id
+                          ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.26)]'
+                          : 'border-[var(--line)] bg-[rgba(242,252,237,0.84)]'
+                      }`}
+                      onMouseEnter={() => setHoveredPointId(point.id)}
+                      onMouseLeave={() => setHoveredPointId(null)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPointId(point.id)}
+                          className="flex-1 text-left text-sm font-semibold text-[var(--sea-ink)]"
+                        >
+                          {point.name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removePointFromBasket(point.id)}
+                          className="point-action-button point-action-button--remove"
+                          aria-label={`Удалить ${point.name} из корзины`}
+                          title="Удалить из корзины"
+                        >
+                          −
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
+                  ))
+                )}
+              </div>
+            </section>
+          ) : null}
 
           <section className="mt-5">
             <p className="island-kicker mb-2">Список точек</p>
@@ -357,8 +395,10 @@ function App() {
                     key={`visible-${point.id}`}
                     className={`rounded-xl border px-3 py-2 ${
                       hoveredPointId === point.id
-                        ? 'border-[rgba(40,142,146,0.58)] bg-[rgba(79,184,178,0.16)]'
-                        : 'border-[var(--line)] bg-white/45'
+                        ? 'border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.26)]'
+                        : selectedPointIds.includes(point.id)
+                          ? 'border-[rgba(27,102,43,0.38)] bg-[rgba(232,250,221,0.92)]'
+                          : 'border-[var(--line)] bg-[rgba(244,253,239,0.86)]'
                     }`}
                     onMouseEnter={() => setHoveredPointId(point.id)}
                     onMouseLeave={() => setHoveredPointId(null)}
@@ -369,32 +409,38 @@ function App() {
                         onClick={() => setSelectedPointId(point.id)}
                         className="flex-1 text-left"
                       >
-                        <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">{point.name}</p>
-                        <p className="mt-0.5 text-xs text-[var(--sea-ink-soft)]">
-                          {inBasket ? 'Добавлена в корзину' : 'Не в корзине'}
+                        <p className="m-0 text-sm font-semibold text-black">{point.name}</p>
+                        <p className="mt-0.5 text-xs text-black">
+                          {activeScenario === 'distance-max'
+                            ? 'Точка доступна для маршрута'
+                            : inBasket
+                              ? 'Добавлена в корзину и смещена вниз'
+                              : 'Не в корзине'}
                         </p>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          inBasket
-                            ? removePointFromBasket(point.id)
-                            : addPointToBasket(point.id)
-                        }
-                        className={`point-action-button ${
-                          inBasket
-                            ? 'point-action-button--remove'
-                            : 'point-action-button--add'
-                        }`}
-                        aria-label={
-                          inBasket
-                            ? `Удалить ${point.name} из корзины`
-                            : `Добавить ${point.name} в корзину`
-                        }
-                        title={inBasket ? 'Удалить из корзины' : 'Добавить в корзину'}
-                      >
-                        {inBasket ? '−' : '+'}
-                      </button>
+                      {activeScenario !== 'distance-max' ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            inBasket
+                              ? removePointFromBasket(point.id)
+                              : addPointToBasket(point.id)
+                          }
+                          className={`point-action-button ${
+                            inBasket
+                              ? 'point-action-button--remove'
+                              : 'point-action-button--add'
+                          }`}
+                          aria-label={
+                            inBasket
+                              ? `Удалить ${point.name} из корзины`
+                              : `Добавить ${point.name} в корзину`
+                          }
+                          title={inBasket ? 'Удалить из корзины' : 'Добавить в корзину'}
+                        >
+                          {inBasket ? '−' : '+'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 )
@@ -403,7 +449,7 @@ function App() {
           </section>
 
           {activeScenario === 'user-route' ? (
-            <p className="mt-2 rounded-xl border border-dashed border-[var(--line)] bg-white/35 px-3 py-2 text-xs text-[var(--sea-ink-soft)]">
+            <p className="mt-2 rounded-xl border border-dashed border-[var(--line)] bg-white/35 px-3 py-2 text-xs text-black">
               Для пользовательского маршрута выберите минимум 2 точки. Порядок в корзине задает порядок обхода.
             </p>
           ) : null}
@@ -412,15 +458,15 @@ function App() {
             <section className="mt-5">
               <p className="island-kicker mb-2">Лимит дистанции</p>
               <label className="block">
-                <span className="text-xs text-[var(--sea-ink-soft)]">км</span>
+                <span className="text-xs text-black">км</span>
                 <input
                   value={distanceLimitInput}
                   onChange={(event) => handleDistanceLimitInputChange(event.target.value)}
                   onBlur={handleDistanceLimitBlur}
                   type="text"
                   inputMode="decimal"
-                  placeholder="например, 5 или 5.5"
-                  className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white/65 px-3 py-2 text-sm text-[var(--sea-ink)] outline-none focus:border-[rgba(40,142,146,0.58)]"
+                  placeholder="только цифры: 5 или 5.5"
+                  className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[rgba(250,255,247,0.98)] px-3 py-2 text-sm text-black placeholder:text-black/70 outline-none focus:border-[rgba(27,102,43,0.42)]"
                 />
               </label>
               {distanceLimitError ? (
@@ -429,27 +475,27 @@ function App() {
             </section>
           ) : null}
 
-          <section className="mt-5 rounded-2xl border border-[var(--line)] bg-white/50 p-3">
-            <p className="island-kicker mb-2">Сводка маршрута</p>
+          <section className="mt-5 rounded-2xl border border-[var(--line)] bg-[rgba(245,253,241,0.9)] p-3">
+            <p className="island-kicker mb-2 text-black">Сводка маршрута</p>
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <p className="m-0 text-xs text-[var(--sea-ink-soft)]">Длина</p>
-                <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">{summaryDistanceKm} км</p>
+                <p className="m-0 text-xs text-black">Длина</p>
+                <p className="m-0 text-sm font-semibold text-black">{summaryDistanceKm} км</p>
               </div>
               <div>
-                <p className="m-0 text-xs text-[var(--sea-ink-soft)]">Время</p>
-                <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">{summaryDurationMin} мин</p>
+                <p className="m-0 text-xs text-black">Время</p>
+                <p className="m-0 text-sm font-semibold text-black">{summaryDurationMin} мин</p>
               </div>
               <div>
-                <p className="m-0 text-xs text-[var(--sea-ink-soft)]">Точки</p>
-                <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">{routeResult?.waypointIds.length ?? 0}</p>
+                <p className="m-0 text-xs text-black">Точки</p>
+                <p className="m-0 text-sm font-semibold text-black">{routeResult?.waypointIds.length ?? 0}</p>
               </div>
             </div>
             <button
               type="button"
               disabled={!canBuildRoute}
               onClick={() => void handleBuildRoute('manual')}
-              className="mt-3 w-full rounded-xl border border-[rgba(40,142,146,0.58)] bg-[rgba(79,184,178,0.19)] px-3 py-2 text-sm font-semibold text-[var(--sea-ink)] hover:bg-[rgba(79,184,178,0.28)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-3 w-full rounded-xl border border-[rgba(27,102,43,0.42)] bg-[rgba(165,236,127,0.28)] px-3 py-2 text-sm font-semibold text-black hover:bg-[rgba(165,236,127,0.4)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isRouting ? 'Построение...' : 'Построить маршрут'}
             </button>
@@ -458,16 +504,16 @@ function App() {
             ) : null}
           </section>
 
-          <section className="mt-5 rounded-2xl border border-[var(--line)] bg-white/55 p-3">
-            <p className="island-kicker mb-2">Выбранная точка</p>
+          <section className="mt-5 rounded-2xl border border-[var(--line)] bg-[rgba(245,253,241,0.92)] p-3 text-black">
+            <p className="island-kicker mb-2 text-black">Выбранная точка</p>
             {selectedPoint ? (
               <>
-                <div className="h-28 rounded-xl border border-[var(--line)] bg-[linear-gradient(130deg,rgba(79,184,178,0.18),rgba(47,106,74,0.1))]" />
-                <p className="mt-3 mb-1 text-sm font-semibold text-[var(--sea-ink)]">{selectedPoint.name}</p>
-                <p className="m-0 text-xs text-[var(--sea-ink-soft)]">{selectedPoint.description}</p>
+                <div className="h-28 rounded-xl border border-[var(--line)] bg-[linear-gradient(130deg,rgba(165,236,127,0.28),rgba(12,71,32,0.14))]" />
+                <p className="mt-3 mb-1 text-sm font-semibold text-black">{selectedPoint.name}</p>
+                <p className="m-0 text-xs text-black">{selectedPoint.description}</p>
               </>
             ) : (
-              <p className="m-0 text-xs text-[var(--sea-ink-soft)]">
+              <p className="m-0 text-xs text-black">
                 Выберите точку на карте или в корзине, чтобы увидеть описание.
               </p>
             )}
@@ -478,7 +524,7 @@ function App() {
           {isClient ? (
             <Suspense
               fallback={(
-                <div className="planner-map grid place-items-center rounded-[1.15rem] border border-[var(--line)] bg-white/45 text-sm font-semibold text-[var(--sea-ink-soft)]">
+                <div className="planner-map grid place-items-center rounded-[1.15rem] border border-[var(--line)] bg-[rgba(244,253,239,0.86)] text-sm font-semibold text-black">
                   Загрузка карты...
                 </div>
               )}
@@ -495,7 +541,7 @@ function App() {
               />
             </Suspense>
           ) : (
-            <div className="planner-map grid place-items-center rounded-[1.15rem] border border-[var(--line)] bg-white/45 text-sm font-semibold text-[var(--sea-ink-soft)]">
+            <div className="planner-map grid place-items-center rounded-[1.15rem] border border-[var(--line)] bg-[rgba(244,253,239,0.86)] text-sm font-semibold text-black">
               Подготовка клиентского режима...
             </div>
           )}

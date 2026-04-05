@@ -7,25 +7,25 @@
 }
 
 :root {
-  --sea-ink: #12363d;
-  --sea-ink-soft: #3d6068;
-  --lagoon: #13becf;
-  --lagoon-deep: #0482aa;
-  --palm: #2d925f;
-  --sand: #e6fbf5;
-  --foam: #f6fffb;
+  --sea-ink: #153922;
+  --sea-ink-soft: #3f6648;
+  --lagoon: #a5ec7f;
+  --lagoon-deep: #2f7d36;
+  --palm: #0c4720;
+  --sand: #f3ffe9;
+  --foam: #fdfffa;
   --surface: rgba(255, 255, 255, 0.8);
   --surface-strong: rgba(255, 255, 255, 0.94);
-  --line: rgba(18, 54, 61, 0.14);
+  --line: rgba(21, 57, 34, 0.14);
   --inset-glint: rgba(255, 255, 255, 0.82);
-  --kicker: rgba(12, 128, 101, 0.95);
-  --bg-base: #dffaf1;
+  --kicker: rgba(16, 92, 33, 0.9);
+  --bg-base: #ecfddf;
   --header-bg: rgba(251, 255, 248, 0.84);
   --chip-bg: rgba(255, 255, 255, 0.8);
-  --chip-line: rgba(12, 128, 101, 0.22);
+  --chip-line: rgba(47, 125, 54, 0.2);
   --link-bg-hover: rgba(255, 255, 255, 0.9);
-  --hero-a: rgba(19, 190, 207, 0.35);
-  --hero-b: rgba(45, 146, 95, 0.22);
+  --hero-a: rgba(165, 236, 127, 0.36);
+  --hero-b: rgba(12, 71, 32, 0.2);
   --map-point-size: 1.12rem;
 }
 
@@ -95,7 +95,7 @@ body {
     radial-gradient(1050px 620px at 112% -12%, var(--hero-b), transparent 62%),
     radial-gradient(
       720px 380px at 50% 115%,
-      rgba(79, 184, 178, 0.1),
+      rgba(165, 236, 127, 0.14),
       transparent 68%
     ),
     linear-gradient(
@@ -124,10 +124,10 @@ body::before {
     ),
     radial-gradient(
       circle at 78% 26%,
-      rgba(79, 184, 178, 0.2),
+      rgba(165, 236, 127, 0.24),
       transparent 42%
     ),
-    radial-gradient(circle at 42% 82%, rgba(47, 106, 74, 0.14), transparent 36%);
+    radial-gradient(circle at 42% 82%, rgba(12, 71, 32, 0.16), transparent 36%);
 }
 
 body::after {
@@ -146,13 +146,13 @@ body::after {
 
 a {
   color: var(--lagoon-deep);
-  text-decoration-color: rgba(50, 143, 151, 0.4);
+  text-decoration-color: rgba(47, 125, 54, 0.4);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
 a:hover {
-  color: #246f76;
+  color: #1f6e2f;
 }
 
 code {
@@ -223,7 +223,7 @@ a {
   text-transform: uppercase;
   font-weight: 700;
   font-size: 0.69rem;
-  color: var(--kicker);
+  color: #000;
 }
 
 .nav-link {
@@ -314,9 +314,9 @@ a {
 }
 
 .point-action-button--add {
-  border-color: rgba(8, 133, 161, 0.4);
-  background: rgba(19, 190, 207, 0.2);
-  color: #016887;
+  border-color: rgba(47, 125, 54, 0.35);
+  background: rgba(165, 236, 127, 0.3);
+  color: #1f6e2f;
 }
 
 .point-action-button--remove {
@@ -340,24 +340,24 @@ a {
 }
 
 .science-point-icon--default .science-point-core {
-  background: #0c93b2;
+  background: #3d8b44;
 }
 
 .science-point-icon--route .science-point-core {
-  background: #26b870;
+  background: #0c4720;
 }
 
 .science-point-icon--basket .science-point-core {
-  background: #ff9248;
+  background: #8bbf2f;
 }
 
 .science-point-icon--hovered .science-point-core {
-  background: #0f7cff;
+  background: #4ba34d;
   transform: scale(1.2);
 }
 
 .science-point-icon--selected .science-point-core {
-  background: #f05753;
+  background: #1f6e2f;
   transform: scale(1.28);
 }
 
