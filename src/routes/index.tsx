@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { divIcon } from 'leaflet'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { DivIcon } from 'leaflet'
 import {
-  Circle,
   MapContainer,
+  Marker,
   Polyline,
   TileLayer,
   Tooltip,
@@ -17,6 +19,57 @@ import {
 } from '#/features/science-guide/routing'
 import type { BuiltRoute, ScenarioType, SciencePoint } from '#/features/science-guide/types'
 
+type MarkerVariant = 'default' | 'route' | 'basket' | 'hovered' | 'selected'
+
+const INITIAL_DISTANCE_LIMIT_KM = 4
+
+function formatDistanceLimitInput(valueKm: number): string {
+  return Number.isInteger(valueKm) ? String(valueKm) : valueKm.toFixed(1)
+}
+
+function parseDistanceLimitInputStrict(rawValue: string): {
+  valueKm: number | null
+  error: string | null
+} {
+  const normalized = rawValue.trim().replace(',', '.')
+  if (!normalized) {
+    return { valueKm: null, error: 'Введите лимит дистанции в километрах' }
+  }
+
+  if (!/^\d+(\.\d+)?$/.test(normalized)) {
+    return {
+      valueKm: null,
+      error: 'Используйте число в формате 5 или 5.5',
+    }
+  }
+
+  const valueKm = Number(normalized)
+  if (!Number.isFinite(valueKm) || valueKm <= 0) {
+    return {
+      valueKm: null,
+      error: 'Лимит дистанции должен быть больше нуля',
+    }
+  }
+
+  if (!Number.isInteger(valueKm * 2)) {
+    return {
+      valueKm: null,
+      error: 'Допустим шаг 0.5 км',
+    }
+  }
+
+  return { valueKm, error: null }
+}
+
+function makePointIcon(variant: MarkerVariant): DivIcon {
+  return divIcon({
+    className: `science-point-icon science-point-icon--${variant}`,
+    html: '<span class="science-point-core"></span>',
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  })
+}
+
 export const Route = createFileRoute('/')({ component: App })
 
 function App() {
@@ -25,10 +78,26 @@ function App() {
   const [selectedPointIds, setSelectedPointIds] = useState<number[]>([])
   const [selectedPointId, setSelectedPointId] = useState<number | null>(null)
   const [hoveredPointId, setHoveredPointId] = useState<number | null>(null)
-  const [distanceLimitKm, setDistanceLimitKm] = useState<number>(4)
+  const [distanceLimitKm, setDistanceLimitKm] = useState<number>(INITIAL_DISTANCE_LIMIT_KM)
+  const [distanceLimitInput, setDistanceLimitInput] = useState<string>(
+    formatDistanceLimitInput(INITIAL_DISTANCE_LIMIT_KM),
+  )
+  const [distanceLimitError, setDistanceLimitError] = useState<string | null>(null)
   const [routeResult, setRouteResult] = useState<BuiltRoute | null>(null)
   const [routeError, setRouteError] = useState<string | null>(null)
   const [isRouting, setIsRouting] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const markerIcons = useMemo<Record<MarkerVariant, DivIcon>>(
+    () => ({
+      default: makePointIcon('default'),
+      route: makePointIcon('route'),
+      basket: makePointIcon('basket'),
+      hovered: makePointIcon('hovered'),
+      selected: makePointIcon('selected'),
+    }),
+    [],
+  )
 
   const selectedPoint =
     (selectedPointId ? sciencePointsById.get(selectedPointId) : undefined) ?? null
@@ -55,54 +124,140 @@ function App() {
         .filter((point): point is SciencePoint => Boolean(point))
     }
 
-    if (selectedPointIds.length > 0) {
-      return selectedPointIds
-        .map((id) => sciencePointsById.get(id))
-        .filter((point): point is SciencePoint => Boolean(point))
+    return sciencePoints
+  }, [activeScenario, selectedLectureId])
+
+  const distanceValidation = useMemo(
+    () => parseDistanceLimitInputStrict(distanceLimitInput),
+    [distanceLimitInput],
+  )
+
+  const canBuildRoute =
+    !isRouting
+    && (activeScenario !== 'user-route' || selectedPointIds.length >= 2)
+    && (activeScenario !== 'distance-max' || distanceValidation.error === null)
+
+  function handleDistanceLimitBlur() {
+    const parsed = parseDistanceLimitInputStrict(distanceLimitInput)
+    if (parsed.error || parsed.valueKm === null) {
+      setDistanceLimitError(parsed.error)
+      return
     }
 
-    return sciencePoints
-  }, [activeScenario, selectedLectureId, selectedPointIds])
+    setDistanceLimitError(null)
+    setDistanceLimitKm(parsed.valueKm)
+    setDistanceLimitInput(formatDistanceLimitInput(parsed.valueKm))
+  }
 
-  async function handleBuildRoute() {
+  async function handleBuildRoute(reason: 'manual' | 'auto' = 'manual') {
+    if (activeScenario === 'user-route' && selectedPointIds.length < 2) {
+      setRouteError('Для пользовательского маршрута выберите минимум 2 точки')
+      setRouteResult(null)
+      return
+    }
+
+    let validatedDistanceLimitKm = distanceLimitKm
+    if (activeScenario === 'distance-max') {
+      const parsed = parseDistanceLimitInputStrict(distanceLimitInput)
+      if (parsed.error || parsed.valueKm === null) {
+        setDistanceLimitError(parsed.error)
+        setRouteError(parsed.error)
+        setRouteResult(null)
+        return
+      }
+
+      validatedDistanceLimitKm = parsed.valueKm
+      setDistanceLimitKm(parsed.valueKm)
+      setDistanceLimitInput(formatDistanceLimitInput(parsed.valueKm))
+      setDistanceLimitError(null)
+    }
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setIsRouting(true)
     setRouteError(null)
 
     try {
       const result =
         activeScenario === 'lecture'
-          ? await buildLectureRoute(selectedLectureId)
+          ? await buildLectureRoute(selectedLectureId, controller.signal)
           : activeScenario === 'user-route'
-            ? await buildUserRoute(selectedPointIds[0] ?? 0, selectedPointIds[1] ?? 0)
+            ? await buildUserRoute(selectedPointIds, controller.signal)
             : await buildMaxPointsDistanceRoute({
-                maxDistanceMeters: distanceLimitKm * 1000,
+                maxDistanceMeters: validatedDistanceLimitKm * 1000,
                 candidatePointIds:
-                  selectedPointIds.length > 0
+                  selectedPointIds.length >= 2
                     ? selectedPointIds
                     : sciencePoints.map((point) => point.id),
                 startPointId: selectedPointIds[0],
-              })
+              }, controller.signal)
 
       setRouteResult(result)
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        if (!controller.signal.aborted) {
+          setRouteError('Сервис маршрутов не ответил вовремя, попробуйте снова')
+          setRouteResult(null)
+        }
+
+        return
+      }
+
       const message = error instanceof Error ? error.message : 'Route build failed'
-      setRouteError(message)
+      setRouteError(
+        reason === 'auto'
+          ? `Автопостроение лекции не удалось: ${message}`
+          : message,
+      )
       setRouteResult(null)
     } finally {
-      setIsRouting(false)
+      if (abortRef.current === controller) {
+        abortRef.current = null
+        setIsRouting(false)
+      }
     }
   }
 
-  function togglePointInBasket(pointId: number) {
+  function addPointToBasket(pointId: number) {
     setSelectedPointIds((current) => {
       if (current.includes(pointId)) {
-        return current.filter((id) => id !== pointId)
+        return current
       }
 
       return [...current, pointId]
     })
     setSelectedPointId(pointId)
   }
+
+  function removePointFromBasket(pointId: number) {
+    setSelectedPointIds((current) => current.filter((id) => id !== pointId))
+    setSelectedPointId(pointId)
+  }
+
+  function handleDistanceLimitInputChange(value: string) {
+    setDistanceLimitInput(value)
+    setDistanceLimitError(null)
+  }
+
+  useEffect(() => {
+    if (activeScenario === 'lecture') {
+      void handleBuildRoute('auto')
+    }
+  }, [activeScenario, selectedLectureId])
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort()
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (activeScenario !== 'distance-max') {
+      setDistanceLimitError(null)
+    }
+  }, [activeScenario])
 
   const summaryDistanceKm = ((routeResult?.metrics.distanceMeters ?? 0) / 1000).toFixed(2)
   const summaryDurationMin = Math.round((routeResult?.metrics.durationSeconds ?? 0) / 60)
@@ -174,7 +329,7 @@ function App() {
             <div className="max-h-44 space-y-2 overflow-auto pr-1">
               {basketPoints.length === 0 ? (
                 <p className="m-0 rounded-xl border border-dashed border-[var(--line)] bg-white/35 px-3 py-2 text-xs text-[var(--sea-ink-soft)]">
-                  Нажмите на точки на карте, чтобы добавить их в корзину.
+                  Добавляйте точки через кнопку + в списке ниже.
                 </p>
               ) : (
                 basketPoints.map((point) => (
@@ -188,13 +343,24 @@ function App() {
                     onMouseEnter={() => setHoveredPointId(point.id)}
                     onMouseLeave={() => setHoveredPointId(null)}
                   >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPointId(point.id)}
-                      className="w-full text-left text-sm font-semibold text-[var(--sea-ink)]"
-                    >
-                      {point.name}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPointId(point.id)}
+                        className="flex-1 text-left text-sm font-semibold text-[var(--sea-ink)]"
+                      >
+                        {point.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removePointFromBasket(point.id)}
+                        className="point-action-button point-action-button--remove"
+                        aria-label={`Удалить ${point.name} из корзины`}
+                        title="Удалить из корзины"
+                      >
+                        −
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -204,28 +370,64 @@ function App() {
           <section className="mt-5">
             <p className="island-kicker mb-2">Список точек</p>
             <div className="max-h-52 space-y-2 overflow-auto pr-1">
-              {visibleSidebarPoints.map((point) => (
-                <div
-                  key={`visible-${point.id}`}
-                  className={`rounded-xl border px-3 py-2 ${
-                    hoveredPointId === point.id
-                      ? 'border-[rgba(40,142,146,0.58)] bg-[rgba(79,184,178,0.16)]'
-                      : 'border-[var(--line)] bg-white/45'
-                  }`}
-                  onMouseEnter={() => setHoveredPointId(point.id)}
-                  onMouseLeave={() => setHoveredPointId(null)}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPointId(point.id)}
-                    className="w-full text-left text-sm font-semibold text-[var(--sea-ink)]"
+              {visibleSidebarPoints.map((point) => {
+                const inBasket = selectedPointIds.includes(point.id)
+
+                return (
+                  <div
+                    key={`visible-${point.id}`}
+                    className={`rounded-xl border px-3 py-2 ${
+                      hoveredPointId === point.id
+                        ? 'border-[rgba(40,142,146,0.58)] bg-[rgba(79,184,178,0.16)]'
+                        : 'border-[var(--line)] bg-white/45'
+                    }`}
+                    onMouseEnter={() => setHoveredPointId(point.id)}
+                    onMouseLeave={() => setHoveredPointId(null)}
                   >
-                    {point.name}
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPointId(point.id)}
+                        className="flex-1 text-left"
+                      >
+                        <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">{point.name}</p>
+                        <p className="mt-0.5 text-xs text-[var(--sea-ink-soft)]">
+                          {inBasket ? 'Добавлена в корзину' : 'Не в корзине'}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          inBasket
+                            ? removePointFromBasket(point.id)
+                            : addPointToBasket(point.id)
+                        }
+                        className={`point-action-button ${
+                          inBasket
+                            ? 'point-action-button--remove'
+                            : 'point-action-button--add'
+                        }`}
+                        aria-label={
+                          inBasket
+                            ? `Удалить ${point.name} из корзины`
+                            : `Добавить ${point.name} в корзину`
+                        }
+                        title={inBasket ? 'Удалить из корзины' : 'Добавить в корзину'}
+                      >
+                        {inBasket ? '−' : '+'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </section>
+
+          {activeScenario === 'user-route' ? (
+            <p className="mt-2 rounded-xl border border-dashed border-[var(--line)] bg-white/35 px-3 py-2 text-xs text-[var(--sea-ink-soft)]">
+              Для пользовательского маршрута выберите минимум 2 точки. Порядок в корзине задает порядок обхода.
+            </p>
+          ) : null}
 
           {activeScenario === 'distance-max' ? (
             <section className="mt-5">
@@ -233,14 +435,18 @@ function App() {
               <label className="block">
                 <span className="text-xs text-[var(--sea-ink-soft)]">км</span>
                 <input
-                  value={distanceLimitKm}
-                  min={0.5}
-                  step={0.5}
-                  onChange={(event) => setDistanceLimitKm(Number(event.target.value))}
-                  type="number"
+                  value={distanceLimitInput}
+                  onChange={(event) => handleDistanceLimitInputChange(event.target.value)}
+                  onBlur={handleDistanceLimitBlur}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="например, 5 или 5.5"
                   className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white/65 px-3 py-2 text-sm text-[var(--sea-ink)] outline-none focus:border-[rgba(40,142,146,0.58)]"
                 />
               </label>
+              {distanceLimitError ? (
+                <p className="mt-2 text-xs font-semibold text-[#ba4d4d]">{distanceLimitError}</p>
+              ) : null}
             </section>
           ) : null}
 
@@ -262,8 +468,8 @@ function App() {
             </div>
             <button
               type="button"
-              disabled={isRouting}
-              onClick={handleBuildRoute}
+              disabled={!canBuildRoute}
+              onClick={() => void handleBuildRoute('manual')}
               className="mt-3 w-full rounded-xl border border-[rgba(40,142,146,0.58)] bg-[rgba(79,184,178,0.19)] px-3 py-2 text-sm font-semibold text-[var(--sea-ink)] hover:bg-[rgba(79,184,178,0.28)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isRouting ? 'Построение...' : 'Построить маршрут'}
@@ -304,33 +510,31 @@ function App() {
               const isSelected = selectedPointId === point.id
               const inBasket = selectedPointIds.includes(point.id)
               const inRoute = routeWaypointSet.has(point.id)
+              const markerVariant: MarkerVariant = isSelected
+                ? 'selected'
+                : isHovered
+                  ? 'hovered'
+                  : inBasket
+                    ? 'basket'
+                    : inRoute
+                      ? 'route'
+                      : 'default'
 
               return (
-                <Circle
+                <Marker
                   key={point.id}
-                  center={[point.lat, point.lon]}
-                  pathOptions={{
-                    color: isSelected
-                      ? '#15555b'
-                      : isHovered
-                        ? '#1b8f95'
-                        : inRoute
-                          ? '#2a7f55'
-                          : '#3d7378',
-                    fillColor: inBasket ? '#7ed3bf' : '#f6fbf7',
-                    fillOpacity: inBasket ? 0.9 : 0.72,
-                    weight: isHovered || isSelected ? 3 : 2,
-                  }}
+                  position={[point.lat, point.lon]}
+                  icon={markerIcons[markerVariant]}
                   eventHandlers={{
                     mouseover: () => setHoveredPointId(point.id),
                     mouseout: () => setHoveredPointId(null),
-                    click: () => togglePointInBasket(point.id),
+                    click: () => setSelectedPointId(point.id),
                   }}
                 >
                   <Tooltip>
                     {point.name}
                   </Tooltip>
-                </Circle>
+                </Marker>
               )
             })}
 

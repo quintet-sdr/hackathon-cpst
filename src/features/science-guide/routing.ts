@@ -45,27 +45,25 @@ export async function buildLectureRoute(
 }
 
 export async function buildUserRoute(
-  startPointId: number,
-  endPointId: number,
+  pointIds: number[],
   signal?: AbortSignal,
 ): Promise<BuiltRoute> {
-  if (startPointId === endPointId) {
-    throw new Error('Start and end points must be different')
+  const uniquePointIds = Array.from(new Set(pointIds))
+  if (uniquePointIds.length < 2) {
+    throw new Error('Select at least two different points for a custom route')
   }
 
-  const startPoint = sciencePointsById.get(startPointId)
-  const endPoint = sciencePointsById.get(endPointId)
-
-  if (!startPoint || !endPoint) {
-    throw new Error('Could not resolve one of selected points')
+  const points = resolvePoints(uniquePointIds)
+  if (points.length !== uniquePointIds.length) {
+    throw new Error('Could not resolve one or more selected points')
   }
 
-  const route = await getOsrmRoute([toWaypoint(startPoint), toWaypoint(endPoint)], signal)
+  const route = await getOsrmRoute(points.map(toWaypoint), signal)
 
   return {
     coordinates: route.coordinates,
     metrics: route.metrics,
-    waypointIds: [startPoint.id, endPoint.id],
+    waypointIds: uniquePointIds,
   }
 }
 
@@ -111,7 +109,7 @@ export async function buildMaxPointsDistanceRoute(
   let currentPoint = startPoint
   let currentDistance = 0
 
-  const maxIterations = 12
+  const maxIterations = Math.max(16, resolvedCandidates.length * 2)
   let iteration = 0
 
   while (remaining.length > 0 && iteration < maxIterations) {
@@ -153,7 +151,15 @@ export async function buildMaxPointsDistanceRoute(
     currentPoint = nextPoint
     currentDistance = tentativeDistance
     const originalIndex = remaining.findIndex((point) => point.id === nextPoint.id)
+    if (originalIndex < 0) {
+      throw new Error('Failed to progress distance-based route selection')
+    }
+
     remaining = removeByIndex(remaining, originalIndex)
+  }
+
+  if (iteration >= maxIterations && remaining.length > 0) {
+    throw new Error('Route selection exceeded safe iteration limit')
   }
 
   if (selectedPointIds.length < 2) {
