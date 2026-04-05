@@ -68,6 +68,7 @@ export function ScienceGuideMap({
         [55.741, 48.697],
         [55.785, 48.768],
       ]}
+      attributionControl={false}
       className="planner-map rounded-[1.15rem]"
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />

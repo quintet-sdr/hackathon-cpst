@@ -27,4 +27,5 @@ export interface BuiltRoute {
   coordinates: Array<[number, number]>
   metrics: RouteMetrics
   waypointIds: number[]
+  distanceSelectionMode?: 'exact' | 'nearest'
 }

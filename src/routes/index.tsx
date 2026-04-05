@@ -116,6 +116,7 @@ function App() {
   const [routeResult, setRouteResult] = useState<BuiltRoute | null>(null)
   const [lastBuiltSnapshot, setLastBuiltSnapshot] = useState<RouteBuildSnapshot | null>(null)
   const [routeError, setRouteError] = useState<string | null>(null)
+  const [routeNotice, setRouteNotice] = useState<string | null>(null)
   const [isRouting, setIsRouting] = useState(false)
   const [isClient, setIsClient] = useState(false)
   const [isWeatherPopupOpen, setIsWeatherPopupOpen] = useState(false)
@@ -296,6 +297,7 @@ function App() {
     abortRef.current = controller
     setIsRouting(true)
     setRouteError(null)
+    setRouteNotice(null)
 
     try {
       const result =
@@ -305,11 +307,15 @@ function App() {
             ? await buildUserRoute(selectedPointIds, controller.signal)
             : await buildMaxPointsDistanceRoute({
                 maxDistanceMeters: validatedDistanceLimitKm * 1000,
+                maxOverrunMeters: 1000,
                 candidatePointIds: sciencePoints.map((point) => point.id),
                 startPointId: selectedPointId ?? undefined,
               }, controller.signal)
 
       setRouteResult(result)
+      if (activeScenario === 'distance-max' && result.distanceSelectionMode === 'nearest') {
+        setRouteNotice('Точный маршрут в пределах лимита не найден. Показан ближайший маршрут в пределах +1 км.')
+      }
       setLastBuiltSnapshot(snapshotForBuild)
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -327,6 +333,7 @@ function App() {
           ? `Автопостроение лекции не удалось: ${message}`
           : message,
       )
+      setRouteNotice(null)
       setRouteResult(null)
     } finally {
       if (abortRef.current === controller) {
@@ -395,6 +402,7 @@ function App() {
   useEffect(() => {
     if (activeScenario !== 'distance-max') {
       setDistanceLimitError(null)
+      setRouteNotice(null)
     }
   }, [activeScenario])
 
@@ -617,6 +625,9 @@ function App() {
             </div>
             {routeError ? (
               <p className="mt-2 text-xs font-semibold text-[#ba4d4d]">{routeError}</p>
+            ) : null}
+            {routeNotice ? (
+              <p className="mt-2 text-xs font-semibold text-black">{routeNotice}</p>
             ) : null}
           </section>
 

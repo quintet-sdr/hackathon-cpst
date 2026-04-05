@@ -88,24 +88,73 @@ interface DistanceRouteOptions {
   maxDistanceMeters: number
   candidatePointIds: number[]
   startPointId?: number
+  maxOverrunMeters?: number
 }
 
 function removeByIndex<T>(items: T[], index: number): T[] {
   return [...items.slice(0, index), ...items.slice(index + 1)]
 }
 
+interface DistanceCandidate {
+  route: BuiltRoute
+}
+
+function isBetterDistanceCandidate(
+  candidate: DistanceCandidate,
+  currentBest: DistanceCandidate | null,
+  targetDistanceMeters: number,
+): boolean {
+  if (!currentBest) {
+    return true
+  }
+
+  const candidateDistance = candidate.route.metrics.distanceMeters
+  const bestDistance = currentBest.route.metrics.distanceMeters
+  const candidateDelta = Math.abs(candidateDistance - targetDistanceMeters)
+  const bestDelta = Math.abs(bestDistance - targetDistanceMeters)
+
+  if (candidateDelta !== bestDelta) {
+    return candidateDelta < bestDelta
+  }
+
+  const candidateWaypoints = candidate.route.waypointIds.length
+  const bestWaypoints = currentBest.route.waypointIds.length
+  if (candidateWaypoints !== bestWaypoints) {
+    return candidateWaypoints > bestWaypoints
+  }
+
+  if (candidateDistance !== bestDistance) {
+    return candidateDistance < bestDistance
+  }
+
+  return candidate.route.waypointIds.join(',') < currentBest.route.waypointIds.join(',')
+}
+
 export async function buildMaxPointsDistanceRoute(
   options: DistanceRouteOptions,
   signal?: AbortSignal,
 ): Promise<BuiltRoute> {
-  const { maxDistanceMeters, candidatePointIds } = options
+  const {
+    maxDistanceMeters,
+    candidatePointIds,
+    maxOverrunMeters = 1000,
+  } = options
 
-  if (!Number.isFinite(maxDistanceMeters) || maxDistanceMeters <= 0) {
+  const targetDistanceMeters = maxDistanceMeters
+  const upperBoundDistanceMeters = targetDistanceMeters + maxOverrunMeters
+
+  if (!Number.isFinite(targetDistanceMeters) || targetDistanceMeters <= 0) {
     throw new Error('Distance budget must be a positive number')
+  }
+
+  if (!Number.isFinite(maxOverrunMeters) || maxOverrunMeters < 0) {
+    throw new Error('Distance overrun must be a non-negative number')
   }
 
   const uniqueCandidateIds = Array.from(new Set(candidatePointIds))
   const resolvedCandidates = resolvePoints(uniqueCandidateIds)
+    .slice()
+    .sort((a, b) => a.id - b.id)
 
   if (resolvedCandidates.length < 2) {
     throw new Error('Select at least two points for distance-based routing')
@@ -125,6 +174,8 @@ export async function buildMaxPointsDistanceRoute(
   const selectedPointIds: number[] = [startPoint.id]
   let currentPoint = startPoint
   let currentDistance = 0
+  let exactBest: DistanceCandidate | null = null
+  let nearestBest: DistanceCandidate | null = null
 
   const maxIterations = Math.max(16, resolvedCandidates.length * 2)
   let iteration = 0
@@ -132,7 +183,7 @@ export async function buildMaxPointsDistanceRoute(
   while (remaining.length > 0 && iteration < maxIterations) {
     iteration += 1
 
-    const destinations = remaining.slice(0, 8)
+    const destinations = remaining
     const distances = await getOsrmDistanceTableFromSource(
       toWaypoint(currentPoint),
       destinations.map(toWaypoint),
@@ -148,7 +199,10 @@ export async function buildMaxPointsDistanceRoute(
         continue
       }
 
-      if (candidateDistance < bestDistance) {
+      if (
+        candidateDistance < bestDistance
+        || (candidateDistance === bestDistance && destinations[i].id < destinations[bestIndex]?.id)
+      ) {
         bestDistance = candidateDistance
         bestIndex = i
       }
@@ -160,7 +214,7 @@ export async function buildMaxPointsDistanceRoute(
 
     const nextPoint = destinations[bestIndex]
     const tentativeDistance = currentDistance + bestDistance
-    if (tentativeDistance > maxDistanceMeters) {
+    if (tentativeDistance > upperBoundDistanceMeters) {
       break
     }
 
@@ -173,32 +227,48 @@ export async function buildMaxPointsDistanceRoute(
     }
 
     remaining = removeByIndex(remaining, originalIndex)
+
+    if (selectedPointIds.length >= 2) {
+      const selectedPoints = resolvePoints(selectedPointIds)
+      const route = await getOsrmRoute(selectedPoints.map(toWaypoint), signal)
+
+      if (route.metrics.distanceMeters <= upperBoundDistanceMeters) {
+        const stopDurationSeconds = getStopDurationSeconds(selectedPointIds)
+        const builtRoute: BuiltRoute = {
+          coordinates: route.coordinates,
+          metrics: {
+            ...route.metrics,
+            durationSeconds: route.metrics.durationSeconds + stopDurationSeconds,
+          },
+          waypointIds: [...selectedPointIds],
+          distanceSelectionMode:
+            route.metrics.distanceMeters <= targetDistanceMeters ? 'exact' : 'nearest',
+        }
+
+        const candidate = { route: builtRoute }
+        if (builtRoute.distanceSelectionMode === 'exact') {
+          if (isBetterDistanceCandidate(candidate, exactBest, targetDistanceMeters)) {
+            exactBest = candidate
+          }
+        } else if (isBetterDistanceCandidate(candidate, nearestBest, targetDistanceMeters)) {
+          nearestBest = candidate
+        }
+      }
+    }
   }
 
   if (iteration >= maxIterations && remaining.length > 0) {
     throw new Error('Route selection exceeded safe iteration limit')
   }
 
-  if (selectedPointIds.length < 2) {
-    throw new Error('Distance budget is too small to include additional points')
+  const bestCandidate = exactBest ?? nearestBest
+  if (!bestCandidate) {
+    throw new Error(
+      `Не удалось построить маршрут в пределах лимита +${Math.round(maxOverrunMeters / 1000)} км`,
+    )
   }
 
-  const selectedPoints = resolvePoints(selectedPointIds)
-  const route = await getOsrmRoute(selectedPoints.map(toWaypoint), signal)
-  const stopDurationSeconds = getStopDurationSeconds(selectedPointIds)
-
-  if (route.metrics.distanceMeters > maxDistanceMeters) {
-    throw new Error('Could not build a route inside the selected distance budget')
-  }
-
-  return {
-    coordinates: route.coordinates,
-    metrics: {
-      ...route.metrics,
-      durationSeconds: route.metrics.durationSeconds + stopDurationSeconds,
-    },
-    waypointIds: selectedPointIds,
-  }
+  return bestCandidate.route
 }
 
 export function getLectureById(lectureId: number): Lecture | undefined {
