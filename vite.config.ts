@@ -15,6 +15,11 @@ const config = defineConfig({
     tanstackStart(),
     viteReact(),
   ],
+  server: {
+    host: '0.0.0.0',
+    port: 4173,
+    allowedHosts: ['sdr-cpts.duckdns.org'],
+  },
 })
 
 export default config
